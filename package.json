@@ -1,0 +1,19 @@
+{
+  "name": "screenshot-iq",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "services/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run --workspaces build",
+    "typecheck": "npm run --workspaces typecheck",
+    "test": "npm run --workspaces test",
+    "dev:api": "node services/api-gateway/simple-api.mjs",
+    "dev:worker": "npm --workspace @screenshot-iq/analysis-worker run dev"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

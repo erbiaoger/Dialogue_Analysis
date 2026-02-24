@@ -1,0 +1,107 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Session {
+  id         String      @id @default(cuid())
+  deviceId   String
+  status     String      @default("active")
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  images     Image[]
+  jobs       AnalysisJob[]
+  messages   ChatMessage[]
+  facts      VisualFact[]
+}
+
+model Image {
+  id         String       @id @default(cuid())
+  sessionId  String
+  sha256     String?
+  width      Int?
+  height     Int?
+  objectKey  String?
+  createdAt  DateTime     @default(now())
+  session    Session      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  slices     ImageSlice[]
+  facts      VisualFact[]
+
+  @@index([sessionId])
+}
+
+model ImageSlice {
+  id         String    @id @default(cuid())
+  imageId    String
+  sliceIndex Int
+  x          Int
+  y          Int
+  w          Int
+  h          Int
+  objectKey  String?
+  image      Image     @relation(fields: [imageId], references: [id], onDelete: Cascade)
+  facts      VisualFact[]
+
+  @@index([imageId])
+}
+
+model AnalysisJob {
+  id         String    @id @default(cuid())
+  sessionId  String
+  status     String    @default("pending")
+  errorCode  String?
+  progress   Int       @default(0)
+  startedAt  DateTime?
+  finishedAt DateTime?
+  session    Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+}
+
+model VisualFact {
+  id         String      @id @default(cuid())
+  sessionId  String
+  imageId    String
+  sliceId    String?
+  type       String
+  text       String
+  bbox       Json
+  confidence Float
+  rawJson    Json
+  session    Session     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  image      Image       @relation(fields: [imageId], references: [id], onDelete: Cascade)
+  slice      ImageSlice? @relation(fields: [sliceId], references: [id], onDelete: SetNull)
+  citations  Citation[]
+
+  @@index([sessionId])
+  @@index([imageId])
+}
+
+model ChatMessage {
+  id         String     @id @default(cuid())
+  sessionId  String
+  role       String
+  content    String
+  createdAt  DateTime   @default(now())
+  session    Session    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  citations  Citation[]
+
+  @@index([sessionId])
+}
+
+model Citation {
+  id           String      @id @default(cuid())
+  messageId    String
+  factId       String
+  reasoningRole String
+  score        Float
+  message      ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  fact         VisualFact  @relation(fields: [factId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@index([factId])
+}
