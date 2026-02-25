@@ -2,7 +2,6 @@ import Foundation
 import SwiftUI
 import Combine
 import UIKit
-import CryptoKit
 
 enum ThemeMode: String, CaseIterable, Identifiable {
     case dark
@@ -87,7 +86,6 @@ final class AppState: ObservableObject {
     }
 
     let api = APIClient()
-    private let lastClipboardHashKey = "last_clipboard_screenshot_hash"
     private let defaultPromptKey = "default_auto_prompt"
     private let autoReplyEnabledKey = "default_auto_reply_enabled"
     private let themeModeKey = "ui_theme_mode"
@@ -497,13 +495,4 @@ final class AppState: ObservableObject {
         }
     }
 
-    func importFromClipboardIfAvailable() async {
-        guard let image = UIPasteboard.general.image else { return }
-        guard let data = image.jpegData(compressionQuality: 0.9) else { return }
-        let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-        let last = UserDefaults.standard.string(forKey: lastClipboardHashKey)
-        guard hash != last else { return }
-        UserDefaults.standard.set(hash, forKey: lastClipboardHashKey)
-        await importScreenshots([image], source: "clipboard")
-    }
 }

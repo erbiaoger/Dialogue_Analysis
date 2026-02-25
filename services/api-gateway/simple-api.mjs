@@ -252,6 +252,7 @@ const buildFacts = (sessionId, imageIds) => {
   ]));
 };
 
+
 const dedupeLines = (lines) => {
   const result = [];
   let lastNorm = '';

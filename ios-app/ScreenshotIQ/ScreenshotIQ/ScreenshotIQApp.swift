@@ -10,7 +10,6 @@ struct ScreenshotIQApp: App {
                 .environmentObject(appState)
                 .task {
                     await appState.bootstrapSessionIfNeeded()
-                    await appState.importFromClipboardIfAvailable()
                 }
         }
     }

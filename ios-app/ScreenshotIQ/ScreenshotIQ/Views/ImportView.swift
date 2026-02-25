@@ -141,7 +141,7 @@ struct ImportView: View {
     }
 
     private var importActionsCard: some View {
-        BentoCard(title: "相册", glow: AppTheme.Colors.neonPrimary) {
+        BentoCard(glow: AppTheme.Colors.neonPrimary) {
             VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
                 HStack(spacing: AppTheme.Spacing.sm) {
                     Image(systemName: "photo.stack.fill")
@@ -152,18 +152,18 @@ struct ImportView: View {
                         .foregroundStyle(AppTheme.Colors.textPrimary)
                 }
 
-                Text("从相册选择截图，或从剪贴板粘贴导入")
-                    .font(AppTheme.Typography.body)
-                    .foregroundStyle(AppTheme.Colors.textSecondary)
-
-                HStack(spacing: AppTheme.Spacing.sm) {
+                HStack(alignment: .center, spacing: AppTheme.Spacing.sm) {
+                    Text("选择截图后自动分析")
+                        .font(AppTheme.Typography.body)
+                        .foregroundStyle(AppTheme.Colors.textSecondary)
+                    Spacer()
                     PhotosPicker(
                         selection: $pickerItems,
                         maxSelectionCount: 10,
                         matching: .screenshots,
                         photoLibrary: .shared()
                     ) {
-                        Label("从相册选择截图", systemImage: "photo.on.rectangle.angled")
+                        Label("选择截图", systemImage: "photo.on.rectangle.angled")
                             .font(.system(size: 14, weight: .semibold, design: .rounded))
                             .foregroundStyle(AppTheme.Colors.bgPrimary)
                             .padding(.horizontal, AppTheme.Spacing.md)
@@ -181,11 +181,8 @@ struct ImportView: View {
                             )
                     }
                     .buttonStyle(.plain)
-
-                    NeonButton("剪贴板导入", icon: "doc.on.clipboard.fill", tint: AppTheme.Colors.neonSecondary) {
-                        Task { await appState.importFromClipboardIfAvailable() }
-                    }
                 }
+                .frame(minHeight: 52, alignment: .center)
             }
         }
     }
