@@ -221,7 +221,7 @@ struct ImportView: View {
     }
 
     private var replyQuickCard: some View {
-        BentoCard(title: "高情商回复", glow: AppTheme.Colors.neonPrimary) {
+        BentoCard(title: "回复", glow: AppTheme.Colors.neonPrimary) {
             VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
                 if appState.latestInsightAnswer.isEmpty {
                     Text("导入后会自动生成可复制回复")

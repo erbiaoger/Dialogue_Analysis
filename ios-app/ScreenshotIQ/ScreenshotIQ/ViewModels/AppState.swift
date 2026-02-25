@@ -343,7 +343,7 @@ final class AppState: ObservableObject {
         }
 
         if source == "auto-import" {
-            setStage(.generating, status: "正在生成高情商回复建议...")
+            setStage(.generating, status: "正在生成回复建议...")
             pushTimeline("开始调用大模型生成建议")
         }
 
@@ -369,8 +369,8 @@ final class AppState: ObservableObject {
                 if !resp.analysisSteps.isEmpty {
                     resp.analysisSteps.forEach { pushTimeline($0) }
                 }
-                pushTimeline("已生成高情商回复建议")
-                setStage(.ready, status: "已生成高情商回复建议（已在当前页展示）")
+                pushTimeline("已生成回复建议")
+                setStage(.ready, status: "已生成回复建议（已在当前页展示）")
             }
         } catch {
             if source == "auto-import" {
