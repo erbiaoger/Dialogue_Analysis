@@ -30,6 +30,73 @@ npm install
 npm run dev:api
 ```
 
+## Docker (Local Deployment)
+
+1. Prepare env:
+
+```bash
+cp .env.example .env.local
+# edit .env.local and fill OPENAI_API_KEY
+```
+
+2. Start API in Docker:
+
+```bash
+docker compose up -d --build
+```
+
+3. Check health:
+
+```bash
+curl http://127.0.0.1:8080/healthz
+```
+
+4. Stop:
+
+```bash
+docker compose down
+```
+
+## iPhone Remote Access via Tailscale (Outside Home Network)
+
+1. Install and login Tailscale on **Mac** and **iPhone** with the same tailnet account.
+2. On Mac, verify tailnet IP:
+
+```bash
+tailscale ip -4
+```
+
+3. Keep Docker API running on Mac (`docker compose up -d`).
+4. In iOS app `Settings -> API Base URL`, set:
+
+```text
+http://<your-mac-tailscale-ip>:8080
+```
+
+Example:
+
+```text
+http://100.101.102.103:8080
+```
+
+5. On iPhone Safari (while on cellular or external Wi-Fi), test:
+
+```text
+http://<your-mac-tailscale-ip>:8080/healthz
+```
+
+Expected result:
+
+```json
+{"ok":true}
+```
+
+If failed:
+- Ensure Mac Tailscale status is `Connected`.
+- Ensure iPhone Tailscale status is `Connected`.
+- Ensure Docker container is healthy: `docker ps`.
+- Ensure API URL in app has `http://` prefix and port `:8080`.
+
 ### Enable OpenAI (Real LLM)
 
 Option A: use env file (recommended, auto-loaded by `simple-api.mjs`):

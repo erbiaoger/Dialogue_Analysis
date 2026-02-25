@@ -1,0 +1,15 @@
+.git
+.gitignore
+.DS_Store
+
+node_modules
+**/node_modules
+dist
+coverage
+
+.env
+.env.local
+
+ios-app/**/DerivedData
+ios-app/**/xcuserdata
+ios-app/**/*.xcuserstate

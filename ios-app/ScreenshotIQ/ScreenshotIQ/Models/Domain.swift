@@ -41,6 +41,19 @@ struct ConversationAnalysis: Codable, Hashable {
     let riskPoint: String
 }
 
+struct SpeakerSplit: Codable, Hashable {
+    let otherLines: [String]
+    let selfLines: [String]
+    let mappingRule: String
+    let confidence: Double
+    let lowConfidenceReason: String?
+}
+
+struct ConversationIntent: Codable, Hashable {
+    let otherIntent: String
+    let selfIntent: String
+}
+
 struct ReplyOption: Codable, Hashable, Identifiable {
     var id: String { style + ":" + text }
     let style: String
@@ -60,6 +73,8 @@ struct ChatResponse: Codable {
     let why: String?
     let model: String?
     let llmError: String?
+    let speakerSplit: SpeakerSplit?
+    let intent: ConversationIntent?
 }
 
 struct Evidence: Codable, Identifiable {

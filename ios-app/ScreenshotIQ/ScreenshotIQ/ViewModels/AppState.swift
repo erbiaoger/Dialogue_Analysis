@@ -4,9 +4,33 @@ import Combine
 import UIKit
 import CryptoKit
 
+enum ThemeMode: String, CaseIterable, Identifiable {
+    case dark
+    case light
+    case system
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .dark: return "夜晚"
+        case .light: return "白天"
+        case .system: return "跟随系统"
+        }
+    }
+
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .dark: return .dark
+        case .light: return .light
+        case .system: return nil
+        }
+    }
+}
+
 @MainActor
 final class AppState: ObservableObject {
-    static let defaultPromptTemplate = "请输出：1) 情绪判断，2) 核心诉求，3) 风险点，4) 三种高情商回复版本（温和/坚定/幽默），5) 推荐发送版本与理由。每条回复必须简短、可直接复制。"
+    static let defaultPromptTemplate = "请先按左=对方、右=我分开理解：1) 对方说了什么，2) 我说了什么，3) 对方意思，4) 我方意思；再输出5) 情绪判断，6) 核心诉求，7) 风险点，8) 三种高情商回复版本（温和/坚定/幽默），9) 推荐发送版本与理由。每条回复必须简短、可直接复制。"
     static let defaultAPIBaseURL = APIClient.defaultBaseURLString
 
     @Published var sessionID: String?
@@ -24,10 +48,15 @@ final class AppState: ObservableObject {
     @Published var importStatus: String = "未导入截图"
     @Published var lastModelInfo: String = "模型: 未请求"
     @Published var analysisTimeline: [String] = []
+    @Published var isAnimatingImportPulse: Bool = false
+    @Published var importProgressPhase: Double = 0
 
     @Published var latestInsightQuestion: String = ""
     @Published var latestInsightAnswer: String = ""
     @Published var latestAnalysis: ConversationAnalysis?
+    @Published var latestSpeakerSplit: SpeakerSplit?
+    @Published var latestIntentOther: String = ""
+    @Published var latestIntentSelf: String = ""
     @Published var latestReplyOptions: [ReplyOption] = []
     @Published var latestBestReply: String = ""
     @Published var latestWhy: String = ""
@@ -49,17 +78,27 @@ final class AppState: ObservableObject {
             UserDefaults.standard.set(defaultAutoPrompt, forKey: defaultPromptKey)
         }
     }
+    @Published var connectionTestStatus: String = ""
+
+    @Published var themeMode: ThemeMode {
+        didSet {
+            UserDefaults.standard.set(themeMode.rawValue, forKey: themeModeKey)
+        }
+    }
 
     let api = APIClient()
     private let lastClipboardHashKey = "last_clipboard_screenshot_hash"
     private let defaultPromptKey = "default_auto_prompt"
     private let autoReplyEnabledKey = "default_auto_reply_enabled"
+    private let themeModeKey = "ui_theme_mode"
 
     init() {
         self.apiBaseURL = APIClient.currentBaseURLString()
         self.autoReplyEnabled = UserDefaults.standard.object(forKey: autoReplyEnabledKey) as? Bool ?? true
         self.defaultAutoPrompt = UserDefaults.standard.string(forKey: defaultPromptKey)
             ?? AppState.defaultPromptTemplate
+        let storedTheme = UserDefaults.standard.string(forKey: themeModeKey)
+        self.themeMode = ThemeMode(rawValue: storedTheme ?? "") ?? .dark
     }
 
     func resetDefaultPrompt() {
@@ -69,6 +108,16 @@ final class AppState: ObservableObject {
     func resetAPIBaseURL() {
         apiBaseURL = AppState.defaultAPIBaseURL
         APIClient.saveBaseURL(apiBaseURL)
+    }
+
+    func testAPIConnection() async {
+        connectionTestStatus = "测试中..."
+        do {
+            try await api.healthCheck()
+            connectionTestStatus = "连接成功：/healthz 正常"
+        } catch {
+            connectionTestStatus = "连接失败：\(error.localizedDescription)"
+        }
     }
 
     private func pushTimeline(_ item: String) {
@@ -89,6 +138,26 @@ final class AppState: ObservableObject {
         importStage = stage
         importStatus = status
         importErrorMessage = error
+        switch stage {
+        case .idle:
+            importProgressPhase = 0
+            isAnimatingImportPulse = false
+        case .importing:
+            importProgressPhase = 0.2
+            isAnimatingImportPulse = true
+        case .analyzing:
+            importProgressPhase = 0.55
+            isAnimatingImportPulse = true
+        case .generating:
+            importProgressPhase = 0.82
+            isAnimatingImportPulse = true
+        case .ready:
+            importProgressPhase = 1.0
+            isAnimatingImportPulse = false
+        case .failed:
+            importProgressPhase = 1.0
+            isAnimatingImportPulse = false
+        }
     }
 
     func bootstrapSessionIfNeeded() async {
@@ -105,6 +174,9 @@ final class AppState: ObservableObject {
         latestInsightQuestion = ""
         latestInsightAnswer = ""
         latestAnalysis = nil
+        latestSpeakerSplit = nil
+        latestIntentOther = ""
+        latestIntentSelf = ""
         latestReplyOptions = []
         latestBestReply = ""
         latestWhy = ""
@@ -140,7 +212,133 @@ final class AppState: ObservableObject {
         evidenceItems = loaded
     }
 
-    func ask(_ question: String, source: String = "manual") async {
+    private func streamText(
+        _ full: String,
+        minChunkSize: Int = 14,
+        maxUpdates: Int = 16,
+        delayMs: UInt64 = 6,
+        update: (String) -> Void
+    ) async {
+        let text = full.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else {
+            update("")
+            return
+        }
+        let desiredChunk = Int(ceil(Double(text.count) / Double(max(1, maxUpdates))))
+        let chunkSize = max(minChunkSize, desiredChunk)
+
+        var current = ""
+        var idx = text.startIndex
+        while idx < text.endIndex {
+            let next = text.index(idx, offsetBy: chunkSize, limitedBy: text.endIndex) ?? text.endIndex
+            current += String(text[idx..<next])
+            update(current)
+            idx = next
+            if idx < text.endIndex {
+                try? await Task.sleep(nanoseconds: delayMs * 1_000_000)
+            }
+        }
+        update(text)
+    }
+
+    private func streamStructuredResponse(_ resp: ChatResponse) async {
+        latestSpeakerSplit = nil
+        latestIntentOther = ""
+        latestIntentSelf = ""
+        latestAnalysis = nil
+        latestReplyOptions = []
+        latestBestReply = ""
+        latestWhy = ""
+        latestInsightAnswer = ""
+
+        if let split = resp.speakerSplit {
+            latestSpeakerSplit = SpeakerSplit(
+                otherLines: [],
+                selfLines: [],
+                mappingRule: split.mappingRule,
+                confidence: split.confidence,
+                lowConfidenceReason: split.lowConfidenceReason
+            )
+
+            for line in split.otherLines {
+                guard let current = latestSpeakerSplit else { break }
+                var other = current.otherLines
+                other.append(line)
+                latestSpeakerSplit = SpeakerSplit(
+                    otherLines: other,
+                    selfLines: current.selfLines,
+                    mappingRule: current.mappingRule,
+                    confidence: current.confidence,
+                    lowConfidenceReason: current.lowConfidenceReason
+                )
+                try? await Task.sleep(nanoseconds: 20_000_000)
+            }
+            for line in split.selfLines {
+                guard let current = latestSpeakerSplit else { break }
+                var mine = current.selfLines
+                mine.append(line)
+                latestSpeakerSplit = SpeakerSplit(
+                    otherLines: current.otherLines,
+                    selfLines: mine,
+                    mappingRule: current.mappingRule,
+                    confidence: current.confidence,
+                    lowConfidenceReason: current.lowConfidenceReason
+                )
+                try? await Task.sleep(nanoseconds: 20_000_000)
+            }
+        }
+
+        if let intent = resp.intent {
+            await streamText(intent.otherIntent, minChunkSize: 18, maxUpdates: 10, delayMs: 6) { latestIntentOther = $0 }
+            try? await Task.sleep(nanoseconds: 25_000_000)
+            await streamText(intent.selfIntent, minChunkSize: 18, maxUpdates: 10, delayMs: 6) { latestIntentSelf = $0 }
+        }
+
+        if let analysis = resp.analysis {
+            latestAnalysis = ConversationAnalysis(emotion: "", coreNeed: "", riskPoint: "")
+            await streamText(analysis.emotion, minChunkSize: 18, maxUpdates: 10, delayMs: 6) {
+                latestAnalysis = ConversationAnalysis(
+                    emotion: $0,
+                    coreNeed: latestAnalysis?.coreNeed ?? "",
+                    riskPoint: latestAnalysis?.riskPoint ?? ""
+                )
+            }
+            await streamText(analysis.coreNeed, minChunkSize: 18, maxUpdates: 10, delayMs: 6) {
+                latestAnalysis = ConversationAnalysis(
+                    emotion: latestAnalysis?.emotion ?? "",
+                    coreNeed: $0,
+                    riskPoint: latestAnalysis?.riskPoint ?? ""
+                )
+            }
+            await streamText(analysis.riskPoint, minChunkSize: 18, maxUpdates: 10, delayMs: 6) {
+                latestAnalysis = ConversationAnalysis(
+                    emotion: latestAnalysis?.emotion ?? "",
+                    coreNeed: latestAnalysis?.coreNeed ?? "",
+                    riskPoint: $0
+                )
+            }
+        }
+
+        for (index, option) in resp.replyOptions.enumerated() {
+            latestReplyOptions.append(ReplyOption(style: option.style, text: ""))
+            await streamText(option.text, minChunkSize: 20, maxUpdates: 10, delayMs: 5) { partial in
+                guard latestReplyOptions.indices.contains(index) else { return }
+                latestReplyOptions[index] = ReplyOption(style: option.style, text: partial)
+            }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+
+        if let bestReply = resp.bestReply {
+            await streamText(bestReply, minChunkSize: 20, maxUpdates: 10, delayMs: 5) { latestBestReply = $0 }
+        }
+        if let why = resp.why {
+            await streamText(why, minChunkSize: 20, maxUpdates: 10, delayMs: 5) { latestWhy = $0 }
+        }
+
+        await streamText(resp.answer, minChunkSize: 24, maxUpdates: 12, delayMs: 4) { latestInsightAnswer = $0 }
+    }
+
+    func ask(_ question: String, source: String = "manual", imageIDsOverride: [String]? = nil) async {
         guard let sessionID else {
             setStage(.failed, status: "会话不可用", error: "session_id 缺失")
             return
@@ -152,18 +350,19 @@ final class AppState: ObservableObject {
         }
 
         do {
-            let resp = try await api.sendMessage(sessionID: sessionID, message: question, imageIDs: selectedImageIDs, mode: "hq_reply")
+            let contextImageIDs = imageIDsOverride ?? selectedImageIDs
+            let resp = try await api.sendMessage(sessionID: sessionID, message: question, imageIDs: contextImageIDs, mode: "hq_reply")
             messages.append("Q: \(question)")
-            messages.append("A: \(resp.answer)")
+            messages.append("A: ")
 
             citations = resp.citations
             followups = resp.followups
             latestInsightQuestion = question
-            latestInsightAnswer = resp.answer
-            latestAnalysis = resp.analysis
-            latestReplyOptions = resp.replyOptions
-            latestBestReply = resp.bestReply?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            latestWhy = resp.why?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+            await streamStructuredResponse(resp)
+            if let lastIndex = messages.indices.last {
+                messages[lastIndex] = "A: \(resp.answer)"
+            }
 
             updateModelInfo(model: resp.model, llmError: resp.llmError)
             await refreshEvidenceItems(sessionID: sessionID, citations: resp.citations)
@@ -292,7 +491,7 @@ final class AppState: ObservableObject {
             return
         }
 
-        await ask(prompt, source: "auto-import")
+        await ask(prompt, source: "auto-import", imageIDsOverride: newIDs)
         if importStage == .ready {
             pushTimeline("流程结束")
         }

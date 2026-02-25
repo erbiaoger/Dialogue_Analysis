@@ -7,10 +7,19 @@ final class APIClient {
     private static let baseURLKey = "api_base_url"
     static let defaultBaseURLString = "http://127.0.0.1:8080"
 
+    private static func normalizedBaseURLString(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+        if trimmed.lowercased().hasPrefix("http://") || trimmed.lowercased().hasPrefix("https://") {
+            return trimmed.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        }
+        return "http://\(trimmed.trimmingCharacters(in: CharacterSet(charactersIn: "/")))"
+    }
+
     private var baseURL: URL {
-        let raw = UserDefaults.standard.string(forKey: Self.baseURLKey)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        if let raw, !raw.isEmpty, let url = URL(string: raw) {
+        let raw = UserDefaults.standard.string(forKey: Self.baseURLKey) ?? ""
+        let normalized = Self.normalizedBaseURLString(raw)
+        if !normalized.isEmpty, let url = URL(string: normalized) {
             return url
         }
         return URL(string: Self.defaultBaseURLString)!
@@ -64,20 +73,28 @@ final class APIClient {
     }
 
     static func currentBaseURLString() -> String {
-        let raw = UserDefaults.standard.string(forKey: Self.baseURLKey)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        if let raw, !raw.isEmpty {
-            return raw
+        let raw = UserDefaults.standard.string(forKey: Self.baseURLKey) ?? ""
+        let normalized = normalizedBaseURLString(raw)
+        if !normalized.isEmpty {
+            return normalized
         }
         return Self.defaultBaseURLString
     }
 
     static func saveBaseURL(_ raw: String) {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
+        let normalized = normalizedBaseURLString(raw)
+        if normalized.isEmpty {
             UserDefaults.standard.removeObject(forKey: Self.baseURLKey)
         } else {
-            UserDefaults.standard.set(trimmed, forKey: Self.baseURLKey)
+            UserDefaults.standard.set(normalized, forKey: Self.baseURLKey)
+        }
+    }
+
+    func healthCheck() async throws {
+        let url = baseURL.appendingPathComponent("/healthz")
+        let (_, response) = try await session.data(from: url)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw URLError(.badServerResponse)
         }
     }
 
@@ -185,6 +202,17 @@ final class APIClient {
             let style: String?
             let text: String?
         }
+        struct SpeakerSplitBody: Codable {
+            let other_lines: [String]?
+            let self_lines: [String]?
+            let mapping_rule: String?
+            let confidence: Double?
+            let low_confidence_reason: String?
+        }
+        struct IntentBody: Codable {
+            let other_intent: String?
+            let self_intent: String?
+        }
         struct ResponseBody: Codable {
             let answer: String
             let citations: [Citation]
@@ -198,6 +226,8 @@ final class APIClient {
             let why: String?
             let model: String?
             let llm_error: String?
+            let speaker_split: SpeakerSplitBody?
+            let intent: IntentBody?
         }
 
         let url = baseURL.appendingPathComponent("/v1/sessions/\(sessionID)/chat")
@@ -223,6 +253,28 @@ final class APIClient {
             guard !text.isEmpty else { return nil }
             return ReplyOption(style: style.isEmpty ? "版本" : style, text: text)
         }
+        let mappedSpeakerSplit: SpeakerSplit? = {
+            guard let split = decoded.speaker_split else { return nil }
+            let other = (split.other_lines ?? []).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+            let mine = (split.self_lines ?? []).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+            let mapping = (split.mapping_rule ?? "left_other_right_self").trimmingCharacters(in: .whitespacesAndNewlines)
+            let confidence = split.confidence ?? 0.0
+            let reason = split.low_confidence_reason?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return SpeakerSplit(
+                otherLines: other,
+                selfLines: mine,
+                mappingRule: mapping.isEmpty ? "left_other_right_self" : mapping,
+                confidence: max(0, min(1, confidence)),
+                lowConfidenceReason: reason?.isEmpty == true ? nil : reason
+            )
+        }()
+        let mappedIntent: ConversationIntent? = {
+            guard let intent = decoded.intent else { return nil }
+            return ConversationIntent(
+                otherIntent: (intent.other_intent ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
+                selfIntent: (intent.self_intent ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            )
+        }()
         return ChatResponse(
             answer: decoded.answer,
             citations: decoded.citations,
@@ -235,7 +287,9 @@ final class APIClient {
             bestReply: decoded.best_reply,
             why: decoded.why,
             model: decoded.model,
-            llmError: decoded.llm_error
+            llmError: decoded.llm_error,
+            speakerSplit: mappedSpeakerSplit,
+            intent: mappedIntent
         )
     }
 
