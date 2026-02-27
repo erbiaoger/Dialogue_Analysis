@@ -1,11 +1,12 @@
 services:
   clash:
-    image: metacubex/mihomo:latest
+    build:
+      context: ./clash
+      dockerfile: Dockerfile
     container_name: screenshotiq-clash
     restart: unless-stopped
     volumes:
       - ./clash/config.yaml:/config/config.yaml:ro
-    command: ["-f", "/config/config.yaml"]
     ports:
       - "7890:7890"
       - "9090:9090"
