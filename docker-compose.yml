@@ -1,4 +1,15 @@
 services:
+  clash:
+    image: metacubex/mihomo:latest
+    container_name: screenshotiq-clash
+    restart: unless-stopped
+    volumes:
+      - ./clash/config.yaml:/config/config.yaml:ro
+    command: ["-f", "/config/config.yaml"]
+    ports:
+      - "7890:7890"
+      - "9090:9090"
+
   api-gateway:
     build:
       context: .
@@ -13,6 +24,13 @@ services:
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       OPENAI_VISION_MODEL: ${OPENAI_VISION_MODEL:-gpt-4o-mini}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      NODE_USE_ENV_PROXY: ${NODE_USE_ENV_PROXY:-1}
+      HTTP_PROXY: ${HTTP_PROXY:-http://clash:7890}
+      HTTPS_PROXY: ${HTTPS_PROXY:-http://clash:7890}
+      ALL_PROXY: ${ALL_PROXY:-socks5://clash:7890}
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,clash}
+    depends_on:
+      - clash
     ports:
       - "8080:8080"
     healthcheck:

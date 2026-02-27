@@ -26,12 +26,15 @@
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
-		<key>NSAllowsArbitraryLoadsInWebContent</key>
-		<true/>
-		<key>NSAllowsLocalNetworking</key>
-		<true/>
 		<key>NSExceptionDomains</key>
 		<dict>
+			<key>100.88.219.12</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+			</dict>
 			<key>100.83.211.56</key>
 			<dict>
 				<key>NSExceptionAllowsInsecureHTTPLoads</key>

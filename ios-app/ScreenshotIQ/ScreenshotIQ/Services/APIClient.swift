@@ -91,10 +91,16 @@ final class APIClient {
     }
 
     func healthCheck() async throws {
-        let url = baseURL.appendingPathComponent("/healthz")
-        let (_, response) = try await session.data(from: url)
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            throw URLError(.badServerResponse)
+        let url = baseURL.appendingPathComponent("healthz")
+        do {
+            let (_, response) = try await session.data(from: url)
+            guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+                throw URLError(.badServerResponse)
+            }
+        } catch {
+            let ns = error as NSError
+            let detail = "healthCheck failed url=\(url.absoluteString) domain=\(ns.domain) code=\(ns.code) desc=\(ns.localizedDescription)"
+            throw NSError(domain: "APIClient.HealthCheck", code: ns.code, userInfo: [NSLocalizedDescriptionKey: detail])
         }
     }
 
@@ -102,7 +108,7 @@ final class APIClient {
         struct RequestBody: Codable { let device_id: String }
         struct ResponseBody: Codable { let session_id: String }
 
-        let url = baseURL.appendingPathComponent("/v1/sessions")
+        let url = baseURL.appendingPathComponent("v1/sessions")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -145,7 +151,7 @@ final class APIClient {
             throw URLError(.cannotDecodeContentData)
         }
 
-        let presignURL = baseURL.appendingPathComponent("/v1/sessions/\(sessionID)/images:presign")
+        let presignURL = baseURL.appendingPathComponent("v1/sessions/\(sessionID)/images:presign")
         var presignReq = URLRequest(url: presignURL)
         presignReq.httpMethod = "POST"
         presignReq.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -160,7 +166,7 @@ final class APIClient {
         let digest = SHA256.hash(data: data)
         let sha256 = digest.map { String(format: "%02x", $0) }.joined()
 
-        let commitURL = baseURL.appendingPathComponent("/v1/sessions/\(sessionID)/images:commit")
+        let commitURL = baseURL.appendingPathComponent("v1/sessions/\(sessionID)/images:commit")
         var commitReq = URLRequest(url: commitURL)
         commitReq.httpMethod = "POST"
         commitReq.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -181,7 +187,7 @@ final class APIClient {
         struct AnalyzeRequest: Codable {
             let image_ids: [String]
         }
-        let url = baseURL.appendingPathComponent("/v1/sessions/\(sessionID)/analysis")
+        let url = baseURL.appendingPathComponent("v1/sessions/\(sessionID)/analysis")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -230,7 +236,7 @@ final class APIClient {
             let intent: IntentBody?
         }
 
-        let url = baseURL.appendingPathComponent("/v1/sessions/\(sessionID)/chat")
+        let url = baseURL.appendingPathComponent("v1/sessions/\(sessionID)/chat")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -302,7 +308,7 @@ final class APIClient {
             let confidence: Double
         }
 
-        let url = baseURL.appendingPathComponent("/v1/sessions/\(sessionID)/evidences/\(evidenceID)")
+        let url = baseURL.appendingPathComponent("v1/sessions/\(sessionID)/evidences/\(evidenceID)")
         let (data, response) = try await session.data(from: url)
         try ensureHTTPSuccess(response, data: data)
         let decoded = try JSONDecoder().decode(ResponseBody.self, from: data)

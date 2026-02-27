@@ -71,6 +71,8 @@ struct SettingsView: View {
                             if !appState.connectionTestStatus.isEmpty {
                                 Text(appState.connectionTestStatus)
                                     .font(.system(size: 12, weight: .regular, design: .rounded))
+                                    .lineLimit(nil)
+                                    .multilineTextAlignment(.leading)
                                     .foregroundStyle(appState.connectionTestStatus.contains("成功") ? AppTheme.Colors.neonPrimary : AppTheme.Colors.danger)
                             }
 
