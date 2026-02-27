@@ -3,7 +3,7 @@ FROM alpine:3.20
 RUN apk add --no-cache ca-certificates tzdata wget gzip
 
 # Default to linux-amd64 build. You can override via --build-arg MIHOMO_URLS="url1 url2 ..."
-ARG MIHOMO_URLS="https://github.com/MetaCubeX/mihomo/releases/download/v1.19.10/mihomo-linux-amd64-v3-v1.19.10.gz https://mirror.ghproxy.com/https://github.com/MetaCubeX/mihomo/releases/download/v1.19.10/mihomo-linux-amd64-v3-v1.19.10.gz https://ghproxy.net/https://github.com/MetaCubeX/mihomo/releases/download/v1.19.10/mihomo-linux-amd64-v3-v1.19.10.gz"
+ARG MIHOMO_URLS="https://github.com/MetaCubeX/mihomo/releases/download/v1.19.10/mihomo-linux-amd64-v1.19.10.gz https://github.com/MetaCubeX/mihomo/releases/download/v1.19.10/mihomo-linux-amd64-compatible-v1.19.10.gz https://mirror.ghproxy.com/https://github.com/MetaCubeX/mihomo/releases/download/v1.19.10/mihomo-linux-amd64-v1.19.10.gz https://ghproxy.net/https://github.com/MetaCubeX/mihomo/releases/download/v1.19.10/mihomo-linux-amd64-v1.19.10.gz"
 
 RUN set -eux; \
   ok=""; \
