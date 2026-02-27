@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ProxyAgent, setGlobalDispatcher } from 'undici';
 
 const sessions = new Map();
 const images = new Map();
@@ -38,6 +39,32 @@ const tryLoadEnvFile = (filePath) => {
 
 tryLoadEnvFile(path.join(repoRoot, '.env.local'));
 tryLoadEnvFile(path.join(repoRoot, '.env'));
+
+const pickProxyURL = () => {
+  const candidates = [
+    process.env.HTTPS_PROXY,
+    process.env.HTTP_PROXY,
+    process.env.ALL_PROXY,
+    process.env.https_proxy,
+    process.env.http_proxy,
+    process.env.all_proxy,
+  ];
+  for (const value of candidates) {
+    const v = String(value || '').trim();
+    if (v) return v;
+  }
+  return '';
+};
+
+const proxyURL = pickProxyURL();
+if (proxyURL) {
+  try {
+    setGlobalDispatcher(new ProxyAgent(proxyURL));
+    console.log(`[simple-api] outbound proxy enabled: ${proxyURL}`);
+  } catch (err) {
+    console.error('[simple-api] failed to initialize proxy dispatcher:', String(err));
+  }
+}
 
 const openAIKey = process.env.OPENAI_API_KEY || '';
 const openAIModel = process.env.OPENAI_MODEL || 'gpt-4o-mini';
